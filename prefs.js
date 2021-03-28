@@ -67,33 +67,40 @@ function cssHexString(css) {
     return rrggbb;
 }
 
-function setShortcut(settings) {
-    let shortcut_text = settings.get_string('shortcut-text');
-    let [key, mods] = Gtk.accelerator_parse(shortcut_text);
+// TODO:
+// function setShortcut(settings) {
+//     let shortcut_text = settings.get_string('shortcut-text');
+//     let [key, mods] = Gtk.accelerator_parse(shortcut_text);
 
-    if (Gtk.accelerator_valid(key, mods)) {
-        let shortcut = Gtk.accelerator_name(key, mods);
-        settings.set_strv('shortcut', [shortcut]);
-    }
-    else {
-        settings.set_strv('shortcut', []);
-    }
-}
+//     if (Gtk.accelerator_valid(key, mods)) {
+//         let shortcut = Gtk.accelerator_name(key, mods);
+//         settings.set_strv('shortcut', [shortcut]);
+//     }
+//     else {
+//         settings.set_strv('shortcut', []);
+//     }
+// }
 
-var Settings = class DashToDock_Settings {
 
-    constructor() {
+var Settings = GObject.registerClass({
+    Implements: [Gtk.BuilderScope],
+}, class DashToDock_Settings extends GObject.Object {
+
+    _init() {
+        super._init();
+
         this._settings = ExtensionUtils.getSettings('org.gnome.shell.extensions.dash-to-dock');
 
         this._rtl = (Gtk.Widget.get_default_direction() == Gtk.TextDirection.RTL);
 
         this._builder = new Gtk.Builder();
+        this._builder.set_scope(this);
         this._builder.set_translation_domain(Me.metadata['gettext-domain']);
         this._builder.add_from_file(Me.path + '/Settings.ui');
 
         this.widget = new Gtk.ScrolledWindow({ hscrollbar_policy: Gtk.PolicyType.NEVER });
         this._notebook = this._builder.get_object('settings_notebook');
-        this.widget.add(this._notebook);
+        this.widget.set_child(this._notebook);
 
         // Set a reasonable initial window height
         this.widget.connect('realize', () => {
@@ -108,149 +115,130 @@ var Settings = class DashToDock_Settings {
         this._opacity_timeout = 0;
 
         this._bindSettings();
-
-        this._builder.connect_signals_full(this._connector.bind(this));
     }
 
-    /**
-     * Connect signals
-     */
-    _connector(builder, object, signal, handler) {
-        /**init
-         * Object containing all signals defined in the glade file
-         */
-        const SignalHandler = {
-            dock_display_combo_changed_cb(combo) {
-                this._settings.set_int('preferred-monitor', this._monitors[combo.get_active()]);
-            },
+    vfunc_create_closure(builder, handlerName, flags, connectObject) {
+        if (flags & Gtk.BuilderClosureFlags.SWAPPED)
+            throw new Error('Unsupported template signal flag "swapped"');
+        
+        if (typeof this[handlerName] === 'undefined')
+            throw new Error(`${handlerName} is undefined`);
 
-            position_top_button_toggled_cb(button) {
-                if (button.get_active())
-                    this._settings.set_enum('dock-position', 0);
-            },
+        return this[handlerName].bind(connectObject || this);
+    }
 
-            position_right_button_toggled_cb(button) {
-                if (button.get_active())
-                    this._settings.set_enum('dock-position', 1);
-            },
-
-            position_bottom_button_toggled_cb(button) {
-                if (button.get_active())
-                    this._settings.set_enum('dock-position', 2);
-            },
-
-            position_left_button_toggled_cb(button) {
-                if (button.get_active())
-                    this._settings.set_enum('dock-position', 3);
-            },
-
-            icon_size_combo_changed_cb(combo) {
-                this._settings.set_int('dash-max-icon-size', this._allIconSizes[combo.get_active()]);
-            },
-
-            dock_size_scale_format_value_cb(scale, value) {
-                return Math.round(value * 100) + ' %';
-            },
-
-            dock_size_scale_value_changed_cb(scale) {
-                // Avoid settings the size consinuosly
-                if (this._dock_size_timeout > 0)
-                    GLib.source_remove(this._dock_size_timeout);
-
-                this._dock_size_timeout = GLib.timeout_add(
-                    GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
-                    this._settings.set_double('height-fraction', scale.get_value());
-                    this._dock_size_timeout = 0;
-                    return GLib.SOURCE_REMOVE;
-                });
-            },
-
-            icon_size_scale_format_value_cb(scale, value) {
-                return value + ' px';
-            },
-
-            icon_size_scale_value_changed_cb(scale) {
-                // Avoid settings the size consinuosly
-                if (this._icon_size_timeout > 0)
-                    GLib.source_remove(this._icon_size_timeout);
-
-                this._icon_size_timeout = GLib.timeout_add(
-                    GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
-                    this._settings.set_int('dash-max-icon-size', scale.get_value());
-                    this._icon_size_timeout = 0;
-                    return GLib.SOURCE_REMOVE;
-                });
-            },
-
-            custom_opacity_scale_value_changed_cb(scale) {
-                // Avoid settings the opacity consinuosly as it's change is animated
-                if (this._opacity_timeout > 0)
-                    GLib.source_remove(this._opacity_timeout);
-
-                this._opacity_timeout = GLib.timeout_add(
-                    GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
-                    this._settings.set_double('background-opacity', scale.get_value());
-                    this._opacity_timeout = 0;
-                    return GLib.SOURCE_REMOVE;
-                });
-            },
-
-            min_opacity_scale_value_changed_cb(scale) {
-                // Avoid settings the opacity consinuosly as it's change is animated
-                if (this._opacity_timeout > 0)
-                    GLib.source_remove(this._opacity_timeout);
-
-                this._opacity_timeout = GLib.timeout_add(
-                    GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
-                    this._settings.set_double('min-alpha', scale.get_value());
-                    this._opacity_timeout = 0;
-                    return GLib.SOURCE_REMOVE;
-                });
-            },
-
-            max_opacity_scale_value_changed_cb(scale) {
-                // Avoid settings the opacity consinuosly as it's change is animated
-                if (this._opacity_timeout > 0)
-                    GLib.source_remove(this._opacity_timeout);
-
-                this._opacity_timeout = GLib.timeout_add(
-                    GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
-                    this._settings.set_double('max-alpha', scale.get_value());
-                    this._opacity_timeout = 0;
-                    return GLib.SOURCE_REMOVE;
-                });
-            },
-
-            custom_opacity_scale_format_value_cb(scale, value) {
-                return Math.round(value * 100) + ' %';
-            },
-
-            min_opacity_scale_format_value_cb(scale, value) {
-                return Math.round(value * 100) + ' %';
-            },
-
-            max_opacity_scale_format_value_cb(scale, value) {
-                return Math.round(value * 100) + ' %';
-            },
-
-            all_windows_radio_button_toggled_cb(button) {
-                if (button.get_active())
-                    this._settings.set_enum('intellihide-mode', 0);
-            },
-
-            focus_application_windows_radio_button_toggled_cb(button) {
-                if (button.get_active())
-                    this._settings.set_enum('intellihide-mode', 1);
-            },
-
-            maximized_windows_radio_button_toggled_cb(button) {
-                if (button.get_active())
-                    this._settings.set_enum('intellihide-mode', 2);
-            }
+        dock_display_combo_changed_cb(combo) {
+            this._settings.set_int('preferred-monitor', this._monitors[combo.get_active()]);
         }
 
-        object.connect(signal, SignalHandler[handler].bind(this));
-    }
+        position_top_button_toggled_cb(button) {
+            if (button.get_active())
+                this._settings.set_enum('dock-position', 0);
+        }
+
+        position_right_button_toggled_cb(button) {
+            if (button.get_active())
+            this._settings.set_enum('dock-position', 1);
+        }
+
+        position_bottom_button_toggled_cb(button) {
+            if (button.get_active())
+                this._settings.set_enum('dock-position', 2);
+        }
+
+        position_left_button_toggled_cb(button) {
+            if (button.get_active())
+                this._settings.set_enum('dock-position', 3);
+        }
+
+        icon_size_combo_changed_cb(combo) {
+            this._settings.set_int('dash-max-icon-size', this._allIconSizes[combo.get_active()]);
+        }
+
+        dock_size_scale_format_value_cb(scale, value) {
+            return Math.round(value * 100) + ' %';
+        }
+
+        dock_size_scale_value_changed_cb(scale) {
+            // Avoid settings the size consinuosly
+            if (this._dock_size_timeout > 0)
+                GLib.source_remove(this._dock_size_timeout);
+            this._dock_size_timeout = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
+                this._settings.set_double('height-fraction', scale.get_value());
+                this._dock_size_timeout = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        icon_size_scale_format_value_cb(scale, value) {
+            return value + ' px';
+        }
+        icon_size_scale_value_changed_cb(scale) {
+            // Avoid settings the size consinuosly
+            if (this._icon_size_timeout > 0)
+                GLib.source_remove(this._icon_size_timeout);
+            this._icon_size_timeout = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
+                this._settings.set_int('dash-max-icon-size', scale.get_value());
+                this._icon_size_timeout = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        custom_opacity_scale_value_changed_cb(scale) {
+            // Avoid settings the opacity consinuosly as it's change is animated
+            if (this._opacity_timeout > 0)
+                GLib.source_remove(this._opacity_timeout);
+            this._opacity_timeout = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
+                this._settings.set_double('background-opacity', scale.get_value());
+                this._opacity_timeout = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        min_opacity_scale_value_changed_cb(scale) {
+            // Avoid settings the opacity consinuosly as it's change is animated
+            if (this._opacity_timeout > 0)
+                GLib.source_remove(this._opacity_timeout);
+            this._opacity_timeout = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
+                this._settings.set_double('min-alpha', scale.get_value());
+                this._opacity_timeout = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        max_opacity_scale_value_changed_cb(scale) {
+            // Avoid settings the opacity consinuosly as it's change is animated
+            if (this._opacity_timeout > 0)
+                GLib.source_remove(this._opacity_timeout);
+            this._opacity_timeout = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT, SCALE_UPDATE_TIMEOUT, () => {
+                this._settings.set_double('max-alpha', scale.get_value());
+                this._opacity_timeout = 0;
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        custom_opacity_scale_format_value_cb(scale, value) {
+            return Math.round(value * 100) + ' %';
+        }
+        min_opacity_scale_format_value_cb(scale, value) {
+            return Math.round(value * 100) + ' %';
+        }
+        max_opacity_scale_format_value_cb(scale, value) {
+            return Math.round(value * 100) + ' %';
+        }
+        all_windows_radio_button_toggled_cb(button) {
+            if (button.get_active())
+                this._settings.set_enum('intellihide-mode', 0);
+        }
+        focus_application_windows_radio_button_toggled_cb(button) {
+            if (button.get_active())
+                this._settings.set_enum('intellihide-mode', 1);
+        }
+        maximized_windows_radio_button_toggled_cb(button) {
+            if (button.get_active())
+                this._settings.set_enum('intellihide-mode', 2);
+        }
+
 
     _bindSettings() {
         // Position and size panel
@@ -259,8 +247,9 @@ var Settings = class DashToDock_Settings {
 
         this._monitors = [];
         // Build options based on the number of monitors and the current settings.
-        let n_monitors = Gdk.Screen.get_default().get_n_monitors();
-        let primary_monitor = Gdk.Screen.get_default().get_primary_monitor();
+        let monitors = Gdk.Display.get_default().get_monitors();
+        let n_monitors = monitors.length;
+        let primary_monitor = 0; // Gdk.Screen.get_default().get_primary_monitor();
 
         let monitor = this._settings.get_int('preferred-monitor');
 
@@ -367,7 +356,7 @@ var Settings = class DashToDock_Settings {
             dialog.add_button(__('Reset to defaults'), 1);
 
             let box = this._builder.get_object('intelligent_autohide_advanced_settings_box');
-            dialog.get_content_area().add(box);
+            dialog.get_content_area().append(box);
 
             this._settings.bind('intellihide',
                             this._builder.get_object('intellihide_mode_box'),
@@ -428,7 +417,7 @@ var Settings = class DashToDock_Settings {
                 return;
             });
 
-            dialog.show_all();
+            dialog.present();
 
         });
 
@@ -560,7 +549,7 @@ var Settings = class DashToDock_Settings {
             dialog.add_button(__('Reset to defaults'), 1);
 
             let box = this._builder.get_object('box_overlay_shortcut');
-            dialog.get_content_area().add(box);
+            dialog.get_content_area().append(box);
 
             this._builder.get_object('overlay_switch').set_active(this._settings.get_boolean('hotkeys-overlay'));
             this._builder.get_object('show_dock_switch').set_active(this._settings.get_boolean('hotkeys-show-dock'));
@@ -600,7 +589,7 @@ var Settings = class DashToDock_Settings {
                 return;
             });
 
-            dialog.show_all();
+            dialog.present();
         });
 
         // Create dialog for middle-click options
@@ -616,7 +605,7 @@ var Settings = class DashToDock_Settings {
             dialog.add_button(__('Reset to defaults'), 1);
 
             let box = this._builder.get_object('box_middle_click_options');
-            dialog.get_content_area().add(box);
+            dialog.get_content_area().append(box);
 
             this._builder.get_object('shift_click_action_combo').set_active(this._settings.get_enum('shift-click-action'));
 
@@ -655,7 +644,7 @@ var Settings = class DashToDock_Settings {
                 return;
             });
 
-            dialog.show_all();
+            dialog.present();
 
         });
 
@@ -695,7 +684,7 @@ var Settings = class DashToDock_Settings {
                                           modal: true });
 
             let box = this._builder.get_object('running_dots_advance_settings_box');
-            dialog.get_content_area().add(box);
+            dialog.get_content_area().append(box);
 
             this._settings.bind('running-indicator-dominant-color',
                                 this._builder.get_object('dominant_color_switch'),
@@ -744,7 +733,7 @@ var Settings = class DashToDock_Settings {
                 return;
             });
 
-            dialog.show_all();
+            dialog.present();
 
         });
 
@@ -807,7 +796,7 @@ var Settings = class DashToDock_Settings {
                                           modal: true });
 
             let box = this._builder.get_object('advanced_transparency_dialog');
-            dialog.get_content_area().add(box);
+            dialog.get_content_area().append(box);
 
             this._settings.bind(
                 'customize-alphas',
@@ -842,7 +831,7 @@ var Settings = class DashToDock_Settings {
                 return;
             });
 
-            dialog.show_all();
+            dialog.present();
         });
 
 
@@ -859,7 +848,7 @@ var Settings = class DashToDock_Settings {
 
         this._builder.get_object('extension_version').set_label(Me.metadata.version.toString());
     }
-};
+});
 
 function init() {
     ExtensionUtils.initTranslations();
@@ -868,6 +857,6 @@ function init() {
 function buildPrefsWidget() {
     let settings = new Settings();
     let widget = settings.widget;
-    widget.show_all();
+    if (widget.show_all) widget.show_all();
     return widget;
 }
