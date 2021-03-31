@@ -104,7 +104,7 @@ var Settings = GObject.registerClass({
 
         // Set a reasonable initial window height
         this.widget.connect('realize', () => {
-            let window = this.widget.get_toplevel();
+            let window = this.widget.get_root();
             let [default_width, default_height] = window.get_default_size();
             window.resize(default_width, 650);
         });
@@ -347,7 +347,7 @@ var Settings = GObject.registerClass({
         this._builder.get_object('intelligent_autohide_button').connect('clicked', () => {
 
             let dialog = new Gtk.Dialog({ title: __('Intelligent autohide customization'),
-                                          transient_for: this.widget.get_toplevel(),
+                                          transient_for: this.widget.get_root(),
                                           use_header_bar: true,
                                           modal: true });
 
@@ -540,7 +540,7 @@ var Settings = GObject.registerClass({
         this._builder.get_object('overlay_button').connect('clicked', () => {
 
             let dialog = new Gtk.Dialog({ title: __('Show dock and application numbers'),
-                                          transient_for: this.widget.get_toplevel(),
+                                          transient_for: this.widget.get_root(),
                                           use_header_bar: true,
                                           modal: true });
 
@@ -596,7 +596,7 @@ var Settings = GObject.registerClass({
         this._builder.get_object('middle_click_options_button').connect('clicked', () => {
 
             let dialog = new Gtk.Dialog({ title: __('Customize middle-click behavior'),
-                                          transient_for: this.widget.get_toplevel(),
+                                          transient_for: this.widget.get_root(),
                                           use_header_bar: true,
                                           modal: true });
 
@@ -679,7 +679,7 @@ var Settings = GObject.registerClass({
         this._builder.get_object('running_indicators_advance_settings_button').connect('clicked', () => {
 
             let dialog = new Gtk.Dialog({ title: __('Customize running indicators'),
-                                          transient_for: this.widget.get_toplevel(),
+                                          transient_for: this.widget.get_root(),
                                           use_header_bar: true,
                                           modal: true });
 
@@ -791,7 +791,7 @@ var Settings = GObject.registerClass({
         this._builder.get_object('dynamic_opacity_button').connect('clicked', () => {
 
             let dialog = new Gtk.Dialog({ title: __('Customize opacity'),
-                                          transient_for: this.widget.get_toplevel(),
+                                          transient_for: this.widget.get_root(),
                                           use_header_bar: true,
                                           modal: true });
 
